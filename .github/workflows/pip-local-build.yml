@@ -61,6 +61,12 @@ jobs:
           if source.count(needle) != 1:
               raise SystemExit("ArdiaLaunchConfig data-directory assignment did not match")
           path.write_text(source.replace(needle, replacement, 1))
+          project = Path("apps/browser/macos/Ardia.xcodeproj/project.pbxproj")
+          source = project.read_text()
+          needle = "PRODUCT_BUNDLE_IDENTIFIER = com.ardia.browser;"
+          if source.count(needle) != 2:
+              raise SystemExit("The two application bundle identifiers did not match")
+          project.write_text(source.replace(needle, "PRODUCT_BUNDLE_IDENTIFIER = com.ardia.pip-test;"))
           PY
           git diff --check
       - name: Check the native focus regression
@@ -106,6 +112,27 @@ jobs:
           products="$GITHUB_WORKSPACE/apps/browser/build-pip-local-build/Build/Products/Release"
           test -x "$products/Ardia.app/Contents/MacOS/Ardia"
           test -f "$products/Ardia.app/Contents/Resources/main.jsbundle"
+          python3 - "$products/Ardia.app" <<'PY'
+          import plistlib, sys
+          from pathlib import Path
+          bundle = Path(sys.argv[1])
+          path = bundle / "Contents/Info.plist"
+          with path.open("rb") as source:
+              info = plistlib.load(source)
+          if info.get("CFBundleIdentifier") != "com.ardia.pip-test":
+              raise SystemExit("The built application did not use its isolated test bundle identifier")
+          info["CFBundleDisplayName"] = "Ardia PiP Test"
+          info["CFBundleName"] = "Ardia PiP Test"
+          for key in list(info):
+              if key.startswith("SU") or key in {
+                  "ACUpdateChannel", "ACReleaseNotesURL", "CFBundleURLTypes", "CFBundleDocumentTypes",
+                  "NSUserActivityTypes", "NSDockTilePlugIn",
+              }:
+                  info.pop(key)
+          with path.open("wb") as output:
+              plistlib.dump(info, output)
+          (bundle / "Contents/embedded.provisionprofile").unlink(missing_ok=True)
+          PY
           PIP_PATCH_SHA=$(shasum -a 256 "$RUNNER_TEMP/pip.patch" | awk '{print $1}')
           export PIP_PATCH_SHA
           python3 - "$products/pip-build.json" <<'PY'
@@ -121,6 +148,8 @@ jobs:
               "xcode": subprocess.check_output(["xcodebuild", "-version"], text=True).strip(),
               "app_signing": "unsigned root; nested components retain build-time ad-hoc signatures",
               "test_profile_fallback": "com.ardia.pip-test defaults to ~/Library/Application Support/Ardia PiP Test when ARDIA_DATA_DIR is unset",
+              "bundle_identifier": "com.ardia.pip-test",
+              "display_name": "Ardia PiP Test",
           }
           with open(sys.argv[1], "w") as out:
               json.dump(info, out, indent=2)
