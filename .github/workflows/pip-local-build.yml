@@ -33,6 +33,7 @@ jobs:
       - name: Apply the PiP fix to the installed release
         run: |
           set -euo pipefail
+          git fetch --no-tags https://github.com/mantrakp04/ardia.git refs/tags/v0.2.44:refs/tags/v0.2.44
           test "$(git rev-parse v0.2.44^{commit})" = "$BASE_COMMIT"
           git merge-base --is-ancestor "$PIP_COMMIT" HEAD
           git diff "$PIP_COMMIT^" "$PIP_COMMIT" -- \
